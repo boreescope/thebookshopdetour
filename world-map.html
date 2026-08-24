@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
+<style>
+  html, body { margin: 0; background: transparent; font-family: 'Pretendard Variable', Pretendard, sans-serif; }
+  #map { width: 100%; }
+  .hit { cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+const STOPS = [
+  {id:"e01", n:"01", city:"서울", shop:"유어마인드", coords:[126.98,37.55], g:0},
+  {id:"e02", n:"02", city:"통영", shop:"책방 무명", coords:[128.43,34.85], g:0},
+  {id:"e03", n:"03", city:"도쿄", shop:"다이칸야마 티사이트", coords:[139.70,35.65], g:1},
+  {id:"e04", n:"04", city:"타이베이", shop:"청핀성훠 쑹옌점", coords:[121.56,25.04], g:1},
+  {id:"e05", n:"05", city:"방콕", shop:"하드커버", coords:[100.55,13.74], g:1},
+  {id:"e06", n:"06", city:"하노이", shop:"삭랑탕", coords:[105.85,21.03], g:1},
+  {id:"e07", n:"07", city:"파리", shop:"셰익스피어 앤 컴퍼니", coords:[2.35,48.85], g:2},
+  {id:"e08", n:"08", city:"파리", shop:"부키니스트", coords:[2.30,48.86], g:2},
+  {id:"e09", n:"09", city:"마스트리흐트", shop:"보크한델 도미니카넌", coords:[5.69,50.85], g:2},
+  {id:"e10", n:"10", city:"브로크", shop:"타블레트", coords:[7.10,46.61], g:2},
+  {id:"e11", n:"11", city:"포르투", shop:"리브라리아 렐루", coords:[-8.61,41.15], g:2},
+  {id:"e12", n:"12", city:"마드리드", shop:"데스퍼릿 리터러처", coords:[-3.70,40.42], g:3},
+  {id:"e13", n:"13", city:"페스", shop:"막타바 알미라", coords:[-5.00,34.03], g:3},
+  {id:"e14", n:"14", city:"지브롤터", shop:"리브레리아 바벨", coords:[-5.35,36.14], g:3},
+  {id:"e15", n:"15", city:"뉴욕", shop:"브루클린 아트 라이브러리", coords:[-74.01,40.71], g:4},
+  {id:"e16", n:"16", city:"LA", shop:"더 라스트 북스토어", coords:[-118.24,34.05], g:4},
+  {id:"e17", n:"17", city:"샌프란시스코", shop:"시티 라이츠", coords:[-122.42,37.77], g:4},
+  {id:"e18", n:"18", city:"부에노스아이레스", shop:"프리메라 이 울티마", coords:[-58.38,-34.60], g:4},
+  {id:"e19", n:"19", city:"과나후아토", shop:"라 베타", coords:[-101.26,21.02], g:4}
+];
+const COLORS = ["#141613", "#C0532F", "#C8A02A", "#4F7A3D", "#2F5E86"];
+
+const W = 1000, H = 520;
+const svg = d3.select("#map").append("svg")
+  .attr("viewBox", `0 0 ${W} ${H}`).attr("width", "100%");
+
+d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json").then(topology => {
+  const countries = topojson.feature(topology, topology.objects.countries);
+  const projection = d3.geoNaturalEarth1().fitExtent([[16, 18], [W - 16, H - 30]], countries);
+  const path = d3.geoPath(projection);
+
+  svg.append("path").attr("d", path(d3.geoGraticule().step([30, 30])()))
+    .attr("fill", "none").attr("stroke", "rgba(20,22,19,0.14)").attr("stroke-width", 0.6);
+
+  svg.append("g").selectAll("path").data(countries.features).join("path")
+    .attr("d", path).attr("fill", "none")
+    .attr("stroke", "rgba(20,22,19,0.32)").attr("stroke-width", 0.8);
+
+  const pts = STOPS.map(s => ({ ...s, xy: projection(s.coords) }));
+
+  svg.append("path")
+    .attr("d", "M " + pts.map(p => p.xy.join(",")).join(" L "))
+    .attr("fill", "none").attr("stroke", "#6E6033").attr("stroke-width", 1.3)
+    .attr("stroke-dasharray", "5,5").attr("opacity", 0.55);
+
+  const tipLayer = svg.append("g").style("pointer-events", "none");
+
+  const nodes = svg.append("g").selectAll("g").data(pts).join("g").attr("class", "hit");
+  nodes.append("circle")
+    .attr("cx", d => d.xy[0]).attr("cy", d => d.xy[1]).attr("r", 4.2)
+    .attr("fill", d => COLORS[d.g]);
+  nodes.append("circle")
+    .attr("cx", d => d.xy[0]).attr("cy", d => d.xy[1]).attr("r", 13)
+    .attr("fill", "transparent");
+
+  nodes
+    .on("mouseenter", function (event, d) {
+      d3.select(this).select("circle").transition().duration(140).attr("r", 6.4);
+      showTip(d);
+    })
+    .on("mouseleave", function () {
+      d3.select(this).select("circle").transition().duration(140).attr("r", 4.2);
+      tipLayer.selectAll("*").remove();
+    })
+    .on("click", (event, d) => {
+      window.parent.postMessage({ type: "openEntry", id: d.id }, "*");
+    });
+
+  function showTip(d) {
+    tipLayer.selectAll("*").remove();
+    const c = COLORS[d.g];
+    const label = `${d.city} ${d.n}`;
+    const flipX = d.xy[0] > W * 0.68;
+    const padX = 9, padY = 7;
+    const g = tipLayer.append("g");
+    const t1 = g.append("text").attr("font-size", 11.5).attr("font-weight", 600).attr("fill", "#fff").text(label);
+    const t2 = g.append("text").attr("font-size", 10).attr("fill", "rgba(255,255,255,0.82)").text(d.shop);
+    const w = Math.max(t1.node().getComputedTextLength(), t2.node().getComputedTextLength()) + padX * 2;
+    const h = 40;
+    const bx = flipX ? d.xy[0] - w - 12 : d.xy[0] + 12;
+    const by = Math.max(4, Math.min(H - h - 4, d.xy[1] - h / 2));
+    g.insert("rect", "text")
+      .attr("x", bx).attr("y", by).attr("width", w).attr("height", h)
+      .attr("rx", 7).attr("fill", c).attr("opacity", 0.95);
+    t1.attr("x", bx + padX).attr("y", by + padY + 10);
+    t2.attr("x", bx + padX).attr("y", by + padY + 25);
+  }
+}).catch(() => {
+  d3.select("#map").append("div")
+    .style("padding", "24px").style("font-size", "12px").style("color", "#8A8168")
+    .text("지도 데이터를 불러오지 못했습니다.");
+});
+</script>
+</body>
+</html>
